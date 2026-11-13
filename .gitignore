@@ -1,0 +1,58 @@
+# Build output and third-party binaries
+dist/
+release/
+release-verify/
+*.tar
+*.part01
+*.part02
+*.exe
+*.dll
+*.node
+*.asar
+*.pak
+
+# Installed dependencies and vendored applications
+node_modules/
+app/node_modules/
+app/vendor/
+
+# Build-time tools and their state
+_tools/
+
+# Debug leftovers from capturing a guest's stdout while developing
+o.txt
+e.txt
+out.txt
+err.txt
+pkg-out*.txt
+pkg-err*.txt
+debug.log
+*.bak
+*.bak-asar
+
+# Screenshot and capture scratch space
+capture*/
+*.png
+
+# Electron runtime files (this is the dev workspace too)
+chrome_*.pak
+resources.pak
+icudtl.dat
+snapshot_blob.bin
+v8_context_snapshot.bin
+vk_swiftshader*.dll
+vk_swiftshader_icd.json
+vulkan-1.dll
+d3dcompiler_47.dll
+dxcompiler.dll
+dxil.dll
+ffmpeg.dll
+LICENSES.chromium.html
+version
+locales/
+resources/
+
+# Editor and OS noise
+.DS_Store
+Thumbs.db
+*.log

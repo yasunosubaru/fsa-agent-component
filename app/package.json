@@ -1,0 +1,20 @@
+{
+  "name": "agentdeck",
+  "productName": "AgentDeck",
+  "version": "1.0.0",
+  "description": "AgentDeck — OpenChamber, Claude Code and four desktop front ends in one window, fully self-contained",
+  "main": "src/main/main.js",
+  "author": "AgentDeck",
+  "license": "MIT",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev"
+  },
+  "dependencies": {
+    "@openchamber/web": "2.5.3",
+    "claude-code-best": "2.8.4",
+    "koffi": "^3.3.7",
+    "node-pty": "1.2.0-beta.15"
+  }
+}

@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="h-full overflow-hidden">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AgentDeck</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="vendor/xterm/xterm.css">
+</head>
+<body class="h-full overflow-hidden text-[13px] antialiased select-none">
+
+<!-- ── 启动动画 ── -->
+<div id="splashScreen" class="splash">
+  <span class="splash-brand" id="splashBrand">AgentDeck</span>
+  <span class="splash-tag" id="splashTag"></span>
+</div>
+
+<div id="app" class="app-layout">
+
+  <!-- ── 自定义标题栏 ── -->
+  <div class="app-titlebar">
+    <span class="app-titlebar-text">AgentDeck</span>
+    <span class="app-titlebar-sep">/</span>
+    <span class="app-titlebar-vendor" id="titlebarVendor">AgentDeck</span>
+    <div class="app-titlebar-actions">
+      <button class="tb-icon-btn" id="btnReload" title="重新载入当前前端">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 12a9 9 0 1 1-2.64-6.36"/><polyline points="21 3 21 9 15 9"/>
+        </svg>
+      </button>
+      <button class="tb-icon-btn" id="btnRestart" title="重启当前前端">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M3 12a9 9 0 1 0 2.64-6.36"/><polyline points="3 3 3 9 9 9"/>
+        </svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- ── 左侧导航栏 ── -->
+  <nav class="app-nav" id="appNav">
+    <span class="app-nav-brand">AgentDeck</span>
+
+    <button class="app-nav-btn active" id="btnHome" data-panel="home" title="主页">
+      <span class="app-nav-icon">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M3 10.5 12 3l9 7.5"/><path d="M5.5 9.5V20h13V9.5"/><path d="M9.5 20v-6h5v6"/>
+        </svg>
+      </span>
+      <span class="app-nav-label">主页</span>
+    </button>
+
+    <div class="app-nav-middle">
+      <button class="app-nav-btn" id="btnChamber" data-panel="openchamber" title="OpenChamber 工作台">
+        <span class="app-nav-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 3 3 8v8l9 5 9-5V8z"/><path d="M12 3v18"/><path d="M3 8l9 5 9-5"/>
+          </svg>
+        </span>
+        <span class="app-nav-label">Chamber</span>
+      </button>
+
+      <button class="app-nav-btn" id="btnClaude" data-panel="claude" title="Claude Code 终端">
+        <span class="app-nav-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="2.5" y="4" width="19" height="16" rx="3"/>
+            <path d="m6.5 10 2.5 2-2.5 2" fill="none"/>
+            <path d="M12.5 14h5"/>
+          </svg>
+        </span>
+        <span class="app-nav-label">Claude</span>
+      </button>
+
+      <div class="app-nav-divider" id="navDividerFrontends"></div>
+
+      <button class="app-nav-btn" id="btnOpcode" data-panel="opcode" title="opcode — Claude Code 工具包">
+        <span class="app-nav-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 2.5 21 7v10l-9 4.5L3 17V7z"/><circle cx="12" cy="12" r="3"/>
+          </svg>
+        </span>
+        <span class="app-nav-label">opcode</span>
+      </button>
+
+      <button class="app-nav-btn" id="btnCodex" data-panel="codex" title="Codex 桌面端">
+        <span class="app-nav-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 3.2 20.2 8v8L12 20.8 3.8 16V8z"/>
+            <path d="M12 8.4 16.1 11v3.2L12 16.8 7.9 14.2V11z"/>
+          </svg>
+        </span>
+        <span class="app-nav-label">Codex</span>
+      </button>
+
+      <button class="app-nav-btn" id="btnEmdash" data-panel="emdash" title="Emdash — 并行多智能体工作台">
+        <span class="app-nav-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="4" width="8" height="7" rx="2"/>
+            <rect x="13" y="4" width="8" height="7" rx="2"/>
+            <rect x="3" y="13" width="8" height="7" rx="2"/>
+            <rect x="13" y="13" width="8" height="7" rx="2"/>
+          </svg>
+        </span>
+        <span class="app-nav-label">Emdash</span>
+      </button>
+
+      <button class="app-nav-btn" id="btnClaudian" data-panel="claudian" title="Claudian — Obsidian 内的 Claude Code">
+        <span class="app-nav-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M5 4.5h9.5L19 9v10.5H5z"/>
+            <path d="M14.5 4.5V9H19"/>
+            <path d="M8.2 12.5h7.6M8.2 16h5"/>
+          </svg>
+        </span>
+        <span class="app-nav-label">Claudian</span>
+      </button>
+
+      <button class="app-nav-btn" id="btnWorkspace" data-panel="workspace" title="工作目录">
+        <span class="app-nav-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 6.5A2.5 2.5 0 0 1 6.5 4h3.2l2 2.5h5.8A2.5 2.5 0 0 1 20 9v8.5a2.5 2.5 0 0 1-2.5 2.5h-11A2.5 2.5 0 0 1 4 17.5v-11z"/>
+            <path d="M4 9h16"/>
+          </svg>
+        </span>
+        <span class="app-nav-label">目录</span>
+      </button>
+    </div>
+
+    <div class="app-nav-bottom">
+      <button class="app-nav-btn" id="btnSettings" data-panel="settings" title="设置">
+        <span class="app-nav-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M9.67 3.54a2.3 2.3 0 0 1 4.66 0l.18 1.16a2.3 2.3 0 0 0 3.1 1.79l1.08-.44a2.3 2.3 0 0 1 2.33 4.04l-.91.72a2.3 2.3 0 0 0 0 3.58l.91.72a2.3 2.3 0 0 1-2.33 4.04l-1.08-.44a2.3 2.3 0 0 0-3.1 1.79l-.18 1.16a2.3 2.3 0 0 1-4.66 0l-.18-1.16a2.3 2.3 0 0 0-3.1-1.79l-1.08.44a2.3 2.3 0 0 1-2.33-4.04l.91-.72a2.3 2.3 0 0 0 0-3.58l-.91-.72a2.3 2.3 0 0 1 2.33-4.04l1.08.44a2.3 2.3 0 0 0 3.1-1.79l.18-1.16Z"/>
+            <circle cx="12" cy="12" r="3.2"/>
+          </svg>
+        </span>
+        <span class="app-nav-label">设置</span>
+      </button>
+    </div>
+  </nav>
+
+  <!-- ── 主内容区 ── -->
+  <main id="panelArea" class="app-main">
+
+    <!-- 主页 -->
+    <section class="panel" id="homePanel" data-panel="home">
+      <div class="home-wrap">
+        <header class="home-hero">
+          <h1 class="home-title">AgentDeck</h1>
+        </header>
+
+        <div class="deck-grid" id="deckGrid">
+          <!-- 六个前端统一由 app.js 渲染，尺寸与样式完全一致 -->
+        </div>
+      </div>
+    </section>
+
+    <!-- OpenChamber 容器：原生视图在这里对齐 -->
+    <section class="panel" id="openchamberPanel" data-panel="openchamber">
+      <div class="native-slot" id="chamberSlot">
+        <div class="native-placeholder" id="chamberPlaceholder">
+          <div class="ph-spinner"></div>
+          <p class="ph-title" id="chamberPhTitle">正在启动 OpenChamber…</p>
+          <p class="ph-note" id="chamberPhNote">首次启动需要准备运行环境，请稍候。</p>
+          <button class="ph-btn" id="chamberPhRetry" type="button" hidden>重试</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Claude Code 终端 -->
+    <section class="panel" id="claudePanel" data-panel="claude">
+      <div class="term-shell">
+        <div class="term-bar">
+          <span class="term-bar-dot dot-r"></span>
+          <span class="term-bar-dot dot-y"></span>
+          <span class="term-bar-dot dot-g"></span>
+          <span class="term-bar-title" id="termTitle">Claude Code</span>
+          <div class="term-bar-spacer"></div>
+          <button class="term-bar-btn" id="btnTermCwd" title="选择工作目录">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M4 6.5A2.5 2.5 0 0 1 6.5 4h3.2l2 2.5h5.8A2.5 2.5 0 0 1 20 9v8.5a2.5 2.5 0 0 1-2.5 2.5h-11A2.5 2.5 0 0 1 4 17.5v-11z"/>
+            </svg>
+            <span id="termCwdLabel">—</span>
+          </button>
+          <button class="term-bar-btn" id="btnTermRestart" title="重新启动 Claude Code">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 12a9 9 0 1 1-2.64-6.36"/><polyline points="21 3 21 9 15 9"/>
+            </svg>
+            <span>重启</span>
+          </button>
+        </div>
+        <div class="term-stage" id="termStage">
+          <div class="term-mount" id="termMount"></div>
+          <div class="native-placeholder term-placeholder" id="claudePlaceholder">
+            <div class="ph-spinner"></div>
+            <p class="ph-title" id="claudePhTitle">正在启动 Claude Code…</p>
+            <p class="ph-note" id="claudePhNote">首次启动会进行终端初始化。</p>
+            <button class="ph-btn" id="claudePhRetry" type="button" hidden>重试</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 外部前端：真实应用窗口嵌在此槽位 -->
+    <section class="panel" id="opcodePanel" data-panel="opcode">
+      <div class="guest-slot" id="opcodeSlot" data-guest="opcode">
+        <div class="native-placeholder" id="opcodePlaceholder">
+          <div class="ph-spinner"></div>
+          <p class="ph-title" id="opcodePhTitle">正在启动 opcode…</p>
+          <p class="ph-note" id="opcodePhNote">原版 Tauri 应用，首次启动需要准备窗口。</p>
+          <button class="ph-btn" id="opcodePhRetry" type="button" hidden>重试</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel" id="codexPanel" data-panel="codex">
+      <div class="guest-slot" id="codexSlot" data-guest="codex">
+        <div class="native-placeholder" id="codexPlaceholder">
+          <div class="ph-spinner"></div>
+          <p class="ph-title" id="codexPhTitle">正在启动 Codex…</p>
+          <p class="ph-note" id="codexPhNote">原版 Tauri 应用，首次启动需要准备窗口。</p>
+          <button class="ph-btn" id="codexPhRetry" type="button" hidden>重试</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel" id="emdashPanel" data-panel="emdash">
+      <div class="guest-slot" id="emdashSlot" data-guest="emdash">
+        <div class="native-placeholder" id="emdashPlaceholder">
+          <div class="ph-spinner"></div>
+          <p class="ph-title" id="emdashPhTitle">正在启动 Emdash…</p>
+          <p class="ph-note" id="emdashPhNote">原版 Electron 应用，首次启动较慢。</p>
+          <button class="ph-btn" id="emdashPhRetry" type="button" hidden>重试</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel" id="claudianPanel" data-panel="claudian">
+      <div class="guest-slot" id="claudianSlot" data-guest="claudian">
+        <div class="native-placeholder" id="claudianPlaceholder">
+          <div class="ph-spinner"></div>
+          <p class="ph-title" id="claudianPhTitle">正在启动 Claudian…</p>
+          <p class="ph-note" id="claudianPhNote">运行于随包 Obsidian 中，首次启动会准备 vault。</p>
+          <button class="ph-btn" id="claudianPhRetry" type="button" hidden>重试</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- 工作目录 -->
+    <section class="panel" id="workspacePanel" data-panel="workspace">
+      <div class="page-wrap">
+        <header class="page-head">
+          <h2 class="page-title">工作目录</h2>
+          <p class="page-sub">各智能体共用同一个工作目录，切换后新会话从这里开始。</p>
+        </header>
+        <div class="cwd-card">
+          <div class="cwd-row">
+            <span class="cwd-label">当前目录</span>
+            <code class="cwd-path" id="cwdPath">—</code>
+          </div>
+          <div class="cwd-actions">
+            <button class="set-btn set-btn-primary" id="btnPickCwd" type="button">选择目录…</button>
+            <button class="set-btn" id="btnResetCwd" type="button">回到用户主目录</button>
+          </div>
+          <p class="cwd-hint">改动只影响之后新开的会话；已在运行的智能体保持原来的目录。</p>
+        </div>
+        <div class="cwd-card">
+          <div class="cwd-row">
+            <span class="cwd-label">应用数据</span>
+            <code class="cwd-path" id="userDataPath">—</code>
+          </div>
+          <p class="cwd-hint">设置、会话记录与缓存都在这里，整个应用可随目录一起搬走。</p>
+        </div>
+        <div class="cwd-card">
+          <div class="cwd-row">
+            <span class="cwd-label">智能体数据</span>
+            <code class="cwd-path" id="agentHomePath">—</code>
+          </div>
+          <p class="cwd-hint">随包的 OpenCode 只读写这个目录，不会碰到你自己安装的 OpenCode。</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- 设置 -->
+    <section class="panel" id="settingsPanel" data-panel="settings">
+      <div class="page-wrap">
+        <header class="page-head">
+          <h2 class="page-title">设置</h2>
+          <p class="page-sub">外观与运行环境。所有信息来自本机实测。</p>
+        </header>
+
+        <section class="set-section">
+          <h3 class="set-title">外观</h3>
+          <div class="set-rows">
+            <div class="set-field-row">
+              <label class="set-field-label" for="themeSelect">主题</label>
+              <select class="set-input set-select" id="themeSelect">
+                <option value="system">跟随系统</option>
+                <option value="light">浅色</option>
+                <option value="dark">深色</option>
+              </select>
+            </div>
+          </div>
+        </section>
+
+        <section class="set-section">
+          <h3 class="set-title">组件状态</h3>
+          <div class="env-list" id="envList">
+            <div class="env-empty">正在读取…</div>
+          </div>
+        </section>
+
+        <section class="set-section">
+          <h3 class="set-title">外部前端（原版应用）</h3>
+          <p class="set-note">这些是完整应用，各自带后端，以独立进程运行并嵌入本窗口。</p>
+          <div class="env-list" id="guestList">
+            <div class="env-empty">正在读取…</div>
+          </div>
+        </section>
+
+        <section class="set-section">
+          <h3 class="set-title">操作</h3>
+          <div class="set-actions">
+            <button class="set-btn" id="btnReloadChamber" type="button">重载 OpenChamber 界面</button>
+            <button class="set-btn" id="btnRestartChamber" type="button">重启 OpenChamber 服务</button>
+            <button class="set-btn" id="btnRestartClaude" type="button">重启 Claude Code</button>
+            <button class="set-btn" id="btnOpenUserData" type="button">打开数据目录</button>
+            <button class="set-btn" id="btnOpenLog" type="button">查看运行日志</button>
+          </div>
+        </section>
+
+        <section class="set-section">
+          <h3 class="set-title">最近日志</h3>
+          <pre class="log-tail" id="logTail">载入中…</pre>
+        </section>
+
+        <section class="set-section">
+          <h3 class="set-title">关于</h3>
+          <div class="about-grid" id="aboutGrid">
+            <div class="env-empty">正在读取…</div>
+          </div>
+        </section>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<script src="vendor/xterm/xterm.js"></script>
+<script src="vendor/xterm/addon-fit.js"></script>
+<script src="vendor/xterm/addon-web-links.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
