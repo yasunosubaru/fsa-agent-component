@@ -102,6 +102,9 @@ async function main() {
     log('copying Electron runtime…');
     const skipExact = new Set([
       'app', 'dist', 'node_modules', 'scripts', '_tools',
+      // Build outputs kept beside the workspace: release parts, and the staging
+      // clone used to publish the repository. Neither belongs in the app.
+      'release', 'release-verify', 'repo', 'dl-check',
       'out.txt', 'err.txt', 'package-lock.json', 'package.json',
       // electron.exe is copied under its product name in step 3.
       'electron.exe',
@@ -127,9 +130,17 @@ async function main() {
     // 2. The app itself under resources/app.
     log('copying app tree…');
     const appDest = path.join(OUT, 'resources', 'app');
+    // Front ends that are no longer part of the product. Their sources stay in the
+    // working tree (removing files is not this script's job) but they must not
+    // travel in the bundle: together they are ~1.8 GB of dead weight.
+    const retiredVendor = new Set(['opcode', 'emdash', 'obsidian', 'claudian', 'codex', 'cdesktop']);
     await copyDir(APP_DIR, appDest, (from, entry) => {
       // Skip test/map noise that ships inside dependencies.
       if (entry.isDirectory() && entry.name === '.bin') return false;
+      // Retired front ends, matched by their position under vendor/.
+      if (entry.isDirectory()
+        && path.basename(path.dirname(from)) === 'vendor'
+        && retiredVendor.has(entry.name)) return false;
       // Backups next to a vendor bundle: strip-telemetry-key.js keeps the
       // original beside the patched file, and that original still contains the
       // analytics key, so it must never travel with the app.
@@ -249,10 +260,15 @@ async function main() {
       // node_modules trees. Those are the vendor's files, so the trimmer never
       // descends into vendor at all — deleting a directory that merely happens
       // to be named "stubs" or "test" there broke Emdash once.
+      //
+      // app/docs is excluded too: those files are shown inside the app itself, so
+      // they are product content rather than build leftovers.
+      const keepDocs = path.resolve(dir) === path.resolve(path.join(OUT, 'resources', 'app', 'docs'));
       for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
         const p = path.join(dir, entry.name);
         if (entry.isDirectory()) {
           if (entry.name === 'vendor') continue;
+          if (keepDocs && entry.name === 'docs') continue;
           // Third-party test trees: never imported by the app itself.
           if (entry.name === '__tests__' || entry.name === 'test' || entry.name === 'tests') {
             try {
@@ -262,7 +278,7 @@ async function main() {
             continue;
           }
           walkTrim(p);
-        } else if (entry.isFile() && removableFile(entry.name)) {
+        } else if (entry.isFile() && !keepDocs && removableFile(entry.name)) {
           try {
             trimmed += fs.statSync(p).size;
             fs.rmSync(p, { force: true });
@@ -316,15 +332,20 @@ async function main() {
     path.join(OUT, 'resources', 'app', 'node_modules', '@openchamber', 'web', 'server', 'index.js'),
     path.join(OUT, 'resources', 'app', 'node_modules', '@openchamber', 'web', 'dist', 'index.html'),
     // guest front ends
-    path.join(OUT, 'resources', 'app', 'vendor', 'opcode', 'opcode.exe'),
-    path.join(OUT, 'resources', 'app', 'vendor', 'codex', 'codex-desktop.exe'),
-    path.join(OUT, 'resources', 'app', 'vendor', 'emdash', 'Emdash.exe'),
-    path.join(OUT, 'resources', 'app', 'vendor', 'emdash', 'resources', 'app.asar'),
-    path.join(OUT, 'resources', 'app', 'vendor', 'obsidian', 'Obsidian.exe'),
-    path.join(OUT, 'resources', 'app', 'vendor', 'obsidian', 'icudtl.dat'),
-    path.join(OUT, 'resources', 'app', 'vendor', 'claudian', 'main.js'),
-    path.join(OUT, 'resources', 'app', 'vendor', 'claudian', 'manifest.json'),
-    path.join(OUT, 'resources', 'app', 'vendor', 'claudian', 'node_modules'),
+    // The official Codex desktop app: an Electron build extracted from its MSIX
+    // package. The extracted tree runs standalone (measured, no MSIX identity).
+    path.join(OUT, 'resources', 'app', 'vendor', 'codex-official', 'ChatGPT.exe'),
+    path.join(OUT, 'resources', 'app', 'vendor', 'codex-official', 'resources', 'app.asar'),
+    // The official Claude Desktop, running in its third-party deployment mode.
+    path.join(OUT, 'resources', 'app', 'vendor', 'claude-official', 'claude.exe'),
+    path.join(OUT, 'resources', 'app', 'vendor', 'claude-official', 'resources', 'app.asar'),    // The Anthropic-protocol translator: Claude Code needs it to reach providers
+    // that serve open models only on the OpenAI wire.
+    path.join(OUT, 'resources', 'app', 'vendor', 'shim', 'anthropic_shim.py'),
+    // Docker Sandboxes, bundled with its kernel and root filesystems so no system
+    // install is required.
+    path.join(OUT, 'resources', 'app', 'vendor', 'sbx', 'bin', 'sbx.exe'),
+    path.join(OUT, 'resources', 'app', 'vendor', 'sbx', 'libexec', 'nerdbox-kernel-x86_64'),
+    path.join(OUT, 'resources', 'app', 'vendor', 'sbx', 'libexec', 'nerdbox-rootfs-x86_64.erofs'),
     path.join(OUT, 'resources', 'app', 'node_modules', 'koffi'),
   ];
 

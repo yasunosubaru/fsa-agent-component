@@ -3,7 +3,7 @@
 /**
  * Guest front ends.
  *
- * Four bundled front ends (opcode, Codex, Emdash, Claudian) are complete
+ * Two bundled front ends (Codex, cdesktop) are complete
  * applications with their own backend. They cannot be hosted like OpenChamber,
  * whose web UI we can load in a WebContentsView: these render into a window of
  * their own and talk to their own process over a private channel.
@@ -164,33 +164,27 @@ function waitForWindow(pid, timeoutMs) {
 // ── front-end definitions ────────────────────────────────────────────────
 /** Every path is relative to the app root, so the bundle can be moved. */
 const GUESTS = {
-  opcode: {
-    label: 'opcode',
-    kind: 'tauri',
-    exe: ['vendor', 'opcode', 'opcode.exe'],
-    cwd: ['vendor', 'opcode'],
-    note: 'Claude Code 图形化工具包（原版 Tauri 应用）',
-  },
+  // Codex: the official desktop app from OpenAI's MSIX package. Its inference is
+  // configured in %USERPROFILE%\.codex\config.toml — a provider block with an inline
+  // bearer token, so no environment variable is needed when another process launches
+  // it.
   codex: {
     label: 'Codex',
-    kind: 'tauri',
-    exe: ['vendor', 'codex', 'codex-desktop.exe'],
-    cwd: ['vendor', 'codex'],
-    note: 'Codex 桌面端（原版 Tauri 应用）',
-  },
-  emdash: {
-    label: 'Emdash',
     kind: 'electron',
-    exe: ['vendor', 'emdash', 'Emdash.exe'],
-    cwd: ['vendor', 'emdash'],
-    note: '并行多智能体工作台（原版 Electron 应用）',
+    exe: ['vendor', 'codex-official', 'ChatGPT.exe'],
+    cwd: ['vendor', 'codex-official'],
+    note: 'Codex 官方桌面端（OpenAI 原版）',
   },
-  claudian: {
-    label: 'Claudian',
-    kind: 'obsidian',
-    exe: ['vendor', 'obsidian', 'Obsidian.exe'],
-    cwd: ['vendor', 'obsidian'],
-    note: 'Claudian 插件（运行于随包 Obsidian 中）',
+  // Claude Code: the official Claude Desktop app, running in its third-party
+  // deployment mode. That mode is the documented enterprise path: it never contacts
+  // Anthropic for identity, so no sign-in is needed, and inference goes to the
+  // gateway named in %LOCALAPPDATA%\Claude-3p\configLibrary\.
+  claude: {
+    label: 'Claude Code',
+    kind: 'electron',
+    exe: ['vendor', 'claude-official', 'claude.exe'],
+    cwd: ['vendor', 'claude-official'],
+    note: 'Claude Code 官方桌面端（3p 网关模式）',
   },
 };
 
@@ -208,8 +202,6 @@ module.exports = function createGuests(deps) {
 
   /** id → { process, pid, hwnd, ownerHwnd, visible, attached, spec } */
   const running = new Map();
-
-  const claudianState = { vaultId: 'agentdeckvault0001', pluginId: 'realclaudian' };
 
   function resolveGuest(id) {
     const spec = GUESTS[id];
@@ -250,9 +242,17 @@ module.exports = function createGuests(deps) {
     w.SetWindowLongPtr(record.hwnd, GWL_STYLE, style & ~WS_CAPTION & ~WS_THICKFRAME);
 
     // A tool window gets no taskbar button and never takes focus on show.
+    //
+    // But not for these guests. Measured on both shapes that ship now — the
+    // official Codex app (Electron/Chromium) and cdesktop (Tauri/WebView2) —
+    // setting WS_EX_TOOLWINDOW makes the app re-hide its own window: ShowWindow
+    // succeeds, and IsWindowVisible still reports false a second later. Removing
+    // the bit and calling ShowWindow makes it visible immediately.
+    //
+    // A taskbar button is a smaller loss than an invisible panel.
     const ex = Number(w.GetWindowLongPtr(record.hwnd, GWL_EXSTYLE));
     w.SetWindowLongPtr(record.hwnd, GWL_EXSTYLE,
-      (ex & ~WS_EX_APPWINDOW) | WS_EX_TOOLWINDOW);
+      (ex & ~WS_EX_TOOLWINDOW) | WS_EX_APPWINDOW);
 
     // On a top-level window this sets the *owner*, not the parent.
     w.SetWindowLongPtr(record.hwnd, GWLP_HWNDPARENT, Number(hostHwnd));
@@ -266,9 +266,38 @@ module.exports = function createGuests(deps) {
     return true;
   }
 
-  /** Give the guest back to the desktop, hidden, process kept alive. */
-  function detach(record) {
+  /**
+   * Show a window and confirm the window manager agrees.
+   *
+   * Calling ShowWindow once is not enough for these apps. Measured: Codex shows,
+   * then hides itself again a moment later, so after the call the panel looked
+   * empty even though the log said the window was reshown. Repeating the call
+   * until IsWindowVisible actually reports true is what makes it stick.
+   *
+   * The retries are asynchronous on purpose. A synchronous wait here would block
+   * the main process — the same process that owns the window being shown — so the
+   * app could not finish whatever it was doing before being told to show itself.
+   */
+  async function showUntilVisible(record, attempts = 10) {
     const w = loadWin32();
+    for (let i = 0; i < attempts; i++) {
+      w.ShowWindow(record.hwnd, SW_SHOW);
+      w.SetWindowPos(record.hwnd, HWND_TOP, 0, 0, 0, 0,
+        SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+      if (w.IsWindowVisible(record.hwnd)) {
+        record.visible = true;
+        return true;
+      }
+      await new Promise((r) => setTimeout(r, 120));
+    }
+    // The last real state wins: reporting success for a window nobody can see would
+    // only hide the problem behind a green flag.
+    record.visible = Boolean(w.IsWindowVisible(record.hwnd));
+    return record.visible;
+  }
+
+  /** Give the guest back to the desktop, hidden, process kept alive. */
+  function detach(record) {    const w = loadWin32();
     if (!record.hwnd || !w.IsWindow(record.hwnd)) return;
     w.SetWindowLongPtr(record.hwnd, GWLP_HWNDPARENT, 0);
     record.attached = false;
@@ -317,199 +346,6 @@ module.exports = function createGuests(deps) {
       w.SetWindowPos(record.hwnd, HWND_TOP, 0, 0, 0, 0,
         SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
     }
-  }
-
-  // ── Claudian: the Obsidian vault and plugin ────────────────────────────
-  /**
-   * Claudian is an Obsidian plugin, not an application: it has no window of its
-   * own and only runs inside Obsidian, loaded from a vault's plugin folder.
-   *
-   * Three gates must open before Obsidian loads it, and each fails silently:
-   *   1. the folder name must equal the manifest's `id` (here `realclaudian`);
-   *   2. that id must appear in community-plugins.json;
-   *   3. community plugins as a whole must be enabled, which Obsidian keeps in
-   *      the renderer's localStorage — not in any JSON file.
-   *
-   * This prepares 1 and 2 plus a private profile, so Obsidian opens our vault
-   * instead of the user's own. Gate 3 needs the running app.
-   */
-  function ensureClaudianProfile() {
-    const vault = path.join(userData, 'vault');
-    const profile = path.join(userData, 'obsidian-profile');
-    const bundled = path.join(appRoot, 'vendor', 'claudian');
-
-    try {
-      let pluginId = 'realclaudian';
-      try {
-        pluginId = JSON.parse(fs.readFileSync(path.join(bundled, 'manifest.json'), 'utf8')).id || pluginId;
-      } catch {
-        /* keep the known id */
-      }
-
-      const pluginDir = path.join(vault, '.obsidian', 'plugins', pluginId);
-      fs.mkdirSync(pluginDir, { recursive: true });
-      fs.mkdirSync(profile, { recursive: true });
-
-      for (const name of ['main.js', 'manifest.json', 'styles.css']) {
-        const from = path.join(bundled, name);
-        if (fs.existsSync(from)) fs.copyFileSync(from, path.join(pluginDir, name));
-      }
-
-      // The published bundle externalizes its editor dependencies; inside
-      // Obsidian they resolve from the plugin's own node_modules.
-      const deps_ = path.join(bundled, 'node_modules');
-      if (fs.existsSync(deps_)) {
-        const copyTree = (from, to) => {
-          fs.mkdirSync(to, { recursive: true });
-          for (const e of fs.readdirSync(from, { withFileTypes: true })) {
-            const a = path.join(from, e.name);
-            const b = path.join(to, e.name);
-            if (e.isDirectory()) copyTree(a, b);
-            else if (e.isFile()) fs.copyFileSync(a, b);
-          }
-        };
-        copyTree(deps_, path.join(pluginDir, 'node_modules'));
-      }
-
-      // Gate 2
-      fs.writeFileSync(
-        path.join(vault, '.obsidian', 'community-plugins.json'),
-        JSON.stringify([pluginId], null, 2),
-        'utf8',
-      );
-
-      const core = path.join(vault, '.obsidian', 'core-plugins.json');
-      if (!fs.existsSync(core)) {
-        fs.writeFileSync(core,
-          JSON.stringify(['file-explorer', 'global-search', 'switcher', 'page-preview'], null, 2), 'utf8');
-      }
-
-      const readme = path.join(vault, 'README.md');
-      if (!fs.existsSync(readme)) {
-        fs.writeFileSync(readme,
-          '# AgentDeck vault\n\n'
-          + 'This vault hosts the Claudian plugin. It is also a working directory:\n'
-          + 'the agent may read, write and run commands here.\n', 'utf8');
-      }
-
-      // Obsidian only opens a vault it has registered.
-      const registryPath = path.join(profile, 'obsidian.json');
-      let registry = { vaults: {} };
-      if (fs.existsSync(registryPath)) {
-        try { registry = JSON.parse(fs.readFileSync(registryPath, 'utf8')); } catch { registry = { vaults: {} }; }
-      }
-      if (!registry.vaults || typeof registry.vaults !== 'object') registry.vaults = {};
-      for (const key of Object.keys(registry.vaults)) {
-        if (key !== claudianState.vaultId) delete registry.vaults[key];
-      }
-      registry.vaults[claudianState.vaultId] = { path: vault, ts: Date.now(), open: true };
-      fs.writeFileSync(registryPath, JSON.stringify(registry), 'utf8');
-
-      claudianState.pluginId = pluginId;
-    } catch (e) {
-      log('vault: setup failed —', e.message);
-      return null;
-    }
-    return profile;
-  }
-
-  /**
-   * Open gate 3 inside a running Obsidian.
-   *
-   * The community-plugin switch lives in the renderer's localStorage, so only the
-   * app itself can set it. Obsidian is Electron, so its debugging port exposes
-   * that switch, and toggling it through the app's own API is what the settings
-   * checkbox does. Best-effort: on failure the panel still opens, without the
-   * plugin.
-   */
-  async function enableClaudian(debugPort) {
-    const http = require('node:http');
-    const getJson = (url) => new Promise((resolve) => {
-      const req = http.get(url, { timeout: 1500 }, (res) => {
-        let d = '';
-        res.on('data', (c) => { d += c; });
-        res.on('end', () => { try { resolve(JSON.parse(d)); } catch { resolve(null); } });
-      });
-      req.on('error', () => resolve(null));
-      req.on('timeout', () => { req.destroy(); resolve(null); });
-    });
-
-    let page = null;
-    for (let i = 0; i < 40; i++) {
-      const list = await getJson(`http://127.0.0.1:${debugPort}/json/list`);
-      const pages = Array.isArray(list) ? list.filter((t) => t.type === 'page') : [];
-      page = pages.find((p) => String(p.url).startsWith('app://')) || pages[0] || null;
-      if (page) break;
-      await new Promise((r) => setTimeout(r, 500));
-    }
-    if (!page) return { ok: false, error: 'Obsidian 调试端口未就绪' };
-
-    let WebSocket;
-    try {
-      WebSocket = require('ws');
-    } catch (e) {
-      return { ok: false, error: `缺少 ws 模块：${e.message}` };
-    }
-
-    return new Promise((resolve) => {
-      let settled = false;
-      const finish = (v) => {
-        if (settled) return;
-        settled = true;
-        try { ws.close(); } catch { /* already closed */ }
-        resolve(v);
-      };
-
-      const ws = new WebSocket(page.webSocketDebuggerUrl);
-      const pending = new Map();
-      let nextId = 0;
-      const send = (method, params) => new Promise((res) => {
-        const id = ++nextId;
-        pending.set(id, res);
-        ws.send(JSON.stringify({ id, method, params }));
-      });
-
-      ws.on('open', async () => {
-        try {
-          await send('Runtime.enable');
-          const expr = `(async () => {
-            try {
-              const p = window.app && window.app.plugins;
-              if (!p) return { ok: false, error: 'app.plugins 不可用' };
-              if (!p.isEnabled()) await p.setEnable(true);
-              const id = ${JSON.stringify(claudianState.pluginId)};
-              if (!p.isEnabled(id)) {
-                const inst = await p.loadPlugin(id);
-                if (inst && !p.plugins[id]) p.plugins[id] = inst;
-              }
-              return { ok: Boolean(p.isEnabled(id)), communityOn: p.isEnabled(),
-                loaded: Object.keys(p.plugins || {}) };
-            } catch (e) {
-              return { ok: false, error: String((e && e.stack) || e) };
-            }
-          })()`;
-          const r = await send('Runtime.evaluate', {
-            expression: expr, returnByValue: true, awaitPromise: true,
-          });
-          if (r && r.exceptionDetails) {
-            const ex = r.exceptionDetails.exception;
-            finish({ ok: false, error: (ex && ex.description) || r.exceptionDetails.text });
-          } else {
-            finish((r && r.result && r.result.value) || { ok: false, error: '空响应' });
-          }
-        } catch (e) {
-          finish({ ok: false, error: String((e && e.message) || e) });
-        }
-      });
-
-      ws.on('message', (raw) => {
-        let m;
-        try { m = JSON.parse(raw.toString()); } catch { return; }
-        if (m.id && pending.has(m.id)) { pending.get(m.id)(m.result); pending.delete(m.id); }
-      });
-      ws.on('error', (e) => finish({ ok: false, error: String((e && e.message) || e) }));
-      setTimeout(() => finish({ ok: false, error: '启用插件超时' }), 20000);
-    });
   }
 
   // ── public surface ─────────────────────────────────────────────────────
@@ -564,24 +400,20 @@ module.exports = function createGuests(deps) {
 
     let record = running.get(id);
 
+    // A record can outlive its window: an app that closes its own window leaves
+    // the process alive, and `IsWindow` then fails on the stored handle. Treating
+    // that as "already running" would attach and show nothing while reporting
+    // success, so the stale record is dropped and the app is launched again.
+    if (record && record.hwnd && !loadWin32().IsWindow(record.hwnd)) {
+      log('guest: window gone, relaunching', id, `hwnd=${record.hwnd}`);
+      try { record.process.kill(); } catch { /* already dead */ }
+      running.delete(id);
+      record = null;
+    }
+
     if (!record) {
       let args = [];
-      let obsidianDebugPort = 0;
       const env = { ...process.env };
-
-      if (id === 'claudian') {
-        const profile = ensureClaudianProfile();
-        const vault = path.join(userData, 'vault');
-        // Obsidian resolves its profile through Electron's userData path, so a
-        // private profile is a launch argument. The debugging port is how the
-        // plugin switch gets turned on once it is running.
-        obsidianDebugPort = 9420 + Math.floor(Math.random() * 40);
-        args = [
-          `--user-data-dir=${profile || path.join(userData, 'obsidian-profile')}`,
-          `--remote-debugging-port=${obsidianDebugPort}`,
-          vault,
-        ];
-      }
 
       let child;
       try {
@@ -590,11 +422,8 @@ module.exports = function createGuests(deps) {
           stdio: 'ignore',
           // Not windowsHide. That option starts the child with
           // STARTF_USESHOWWINDOW + SW_HIDE, and an Electron app then creates its
-          // window hidden and never shows it: measured, Emdash stayed at
-          // visible=false for 45 s that way and appeared within 1 s without it.
-          // Tauri apps call ShowWindow themselves during startup, which is why
-          // only opcode and Codex survived this. The brief flash before the
-          // window is placed is handled below instead.
+          // window hidden and never shows it — measured, an Electron guest stayed
+          // at visible=false for 45 s that way and appeared within 1 s without it.
           windowsHide: false,
           env,
         });
@@ -615,7 +444,7 @@ module.exports = function createGuests(deps) {
         if (win && !win.isDestroyed()) win.webContents.send('guest:exit', { id, code, signal });
       });
 
-      record.hwnd = waitForWindow(child.pid, spec.kind === 'obsidian' ? 60000 : 45000);
+      record.hwnd = waitForWindow(child.pid, 45000);
       if (!record.hwnd) {
         try { child.kill(); } catch { /* already gone */ }
         running.delete(id);
@@ -629,28 +458,21 @@ module.exports = function createGuests(deps) {
       // finished initialising while hidden and never resumed painting.
       attach(record, hostHwnd);
       place(record, rect);
-
-      if (id === 'claudian' && obsidianDebugPort) {
-        record.plugin = await enableClaudian(obsidianDebugPort);
-        log('claudian: activation', JSON.stringify(record.plugin));
-        // Loading the plugin rearranged Obsidian's layout; fit it again.
-        place(record, rect);
-      }
     } else {
       attach(record, hostHwnd);
       place(record, rect);
     }
 
-    loadWin32().ShowWindow(record.hwnd, SW_SHOW);
-    record.visible = true;
+    await showUntilVisible(record);
 
     return {
-      ok: true,
+      ok: record.visible,
       id,
       pid: record.pid,
       hwnd: record.hwnd.toString(),
       kind: spec.kind,
       plugin: record.plugin || null,
+      error: record.visible ? '' : `${spec.label} 的窗口未能显示出来。`,
     };
   }
 
@@ -663,11 +485,42 @@ module.exports = function createGuests(deps) {
     return { ok: true, launched: true };
   }
 
-  function layoutGuest(id, rect) {
+  /**
+   * Move a guest over its slot, showing it again if it had been hidden.
+   *
+   * The earlier version returned early for a hidden window, which broke the most
+   * ordinary thing a user does: click Claude, click Codex, click Claude again. The
+   * second visit found the guest still running but hidden — switching panels hides
+   * the guest that is no longer active — so the "already running" path did nothing
+   * but reposition, and the panel stayed empty. Measured: `visible=false` after
+   * every return visit while the process was alive.
+   *
+   * Showing a hidden guest is the whole point of bringing its panel forward, so
+   * that happens here rather than only on first launch.
+   */
+  async function layoutGuest(id, rect, hostBuf) {
     const record = running.get(id);
-    if (!record || !record.visible || !rect) return { ok: true, moved: false };
+    if (!record || !rect) return { ok: true, moved: false };
+    if (!record.hwnd || !loadWin32().IsWindow(record.hwnd)) {
+      return { ok: false, moved: false, error: 'guest window is gone' };
+    }
+
+    if (!record.visible) {
+      // Re-establish ownership as well as visibility: hideGuest un-owned the window,
+      // and showing it again without an owner would put it behind other windows
+      // instead of over its panel. The host handle comes from the caller because an
+      // owned window cannot report its owner back through GetParent.
+      const owner = hostBuf && hostBuf.length
+        ? (hostBuf.readBigUInt64LE ? hostBuf.readBigUInt64LE(0) : BigInt(hostBuf.readUInt32LE(0)))
+        : record.ownerHwnd;
+      if (owner) attach(record, owner);
+      await showUntilVisible(record);
+      log('guest: reshown', id, `hwnd=${record.hwnd}`, `owner=${owner}`,
+        `visible=${record.visible}`);
+    }
+
     place(record, rect);
-    return { ok: true, moved: true };
+    return { ok: true, moved: true, reshown: true };
   }
 
   function stopGuest(id) {
@@ -694,7 +547,6 @@ module.exports = function createGuests(deps) {
     layoutGuest,
     stopGuest,
     stopAllGuests,
-    ensureClaudianProfile,
     loadWin32,
   };
 };

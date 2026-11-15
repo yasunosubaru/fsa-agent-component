@@ -33,6 +33,8 @@ debug.log
 # Screenshot and capture scratch space
 capture*/
 *.png
+# …except the images the README shows, which are part of the documentation.
+!docs/images/*.png
 
 # Electron runtime files (this is the dev workspace too)
 chrome_*.pak

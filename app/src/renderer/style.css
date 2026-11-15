@@ -829,6 +829,348 @@ code, pre { font-family: var(--font-mono); }
   min-width: 0;
 }
 .env-row:last-child { border-bottom: none; }
+
+/* Sandbox command output. Wraps rather than scrolling sideways: the lines are
+   long (paths, versions) and a horizontal scrollbar in a settings pane is worse
+   than a taller block. */
+.sandbox-out {
+  margin: 12px 0 0;
+  padding: 12px 14px;
+  border: 1px solid var(--border-faint);
+  border-radius: 10px;
+  background: var(--bg-inset);
+  color: var(--fg-muted);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  line-height: 1.65;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 320px;
+  overflow-y: auto;
+}
+.muted { color: var(--fg-muted); font-size: 11px; }
+
+/* ── sandbox panel ─────────────────────────────────────────────────────── */
+.sbx-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+.sbx-probe-time {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--fg-faint);
+}
+.sbx-card {
+  border: 1px solid var(--border-faint);
+  border-radius: var(--radius-lg);
+  background: var(--bg-raised);
+  margin-bottom: 14px;
+  overflow: hidden;
+}
+.sbx-card-title {
+  margin: 0;
+  padding: 11px 16px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--fg-muted);
+  background: var(--bg-subtle);
+  border-bottom: 1px solid var(--border-faint);
+}
+.sbx-rows { display: flex; flex-direction: column; }
+.sbx-row {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  padding: 9px 16px;
+  border-bottom: 1px solid var(--border-faint);
+  min-width: 0;
+}
+.sbx-row:last-child { border-bottom: none; }
+.sbx-k {
+  flex: 0 0 132px;
+  font-size: 12px;
+  color: var(--fg-muted);
+}
+.sbx-v {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--fg);
+  word-break: break-word;
+}
+.sbx-v code {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  background: var(--code-bg);
+  color: var(--code-fg);
+  padding: 1px 6px;
+  border-radius: 5px;
+}
+.sbx-good { color: var(--ok-fg); }
+.sbx-bad { color: var(--err-fg); }
+.sbx-muted { color: var(--fg-muted); font-size: 11px; }
+
+/* ── command log ───────────────────────────────────────────────────────── */
+.sbx-search-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.sbx-search-row .set-input[type="search"] {
+  flex: 1;
+  min-width: 220px;
+}
+.sbx-search-row .set-select { flex: 0 0 160px; }
+
+/* The list is live and scrollable: it must keep its own scroll position while rows
+   are replaced underneath, so it gets a fixed height and its own scrollbar. */
+#sbxCmdList {
+  max-height: 520px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+.sbx-cmd-input-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.sbx-cmd-input-row .set-input { flex: 1; }
+.sbx-agent-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+.sbx-agent-row .set-select { flex: 0 0 148px; }
+.sbx-agent-row .set-input { flex: 1; min-width: 180px; }
+.sbx-cmd-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+.sbx-cmd {
+  border: 1px solid var(--border-faint);
+  border-radius: var(--radius-md);
+  background: var(--bg-raised);
+  margin-bottom: 8px;
+  overflow: hidden;
+}
+.sbx-cmd-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  cursor: pointer;
+  list-style: none;
+  min-width: 0;
+}
+.sbx-cmd-head::-webkit-details-marker { display: none; }
+.sbx-cmd-badge {
+  flex: 0 0 auto;
+  font-size: 10.5px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 5px;
+  white-space: nowrap;
+}
+.sbx-cmd-badge.sbx-good { background: var(--ok-bg); color: var(--ok-fg); }
+.sbx-cmd-badge.sbx-bad { background: var(--err-bg); color: var(--err-fg); }
+.sbx-cmd-badge.sbx-unknown { background: var(--warn-bg); color: var(--warn-fg); }
+/* The shim's records are a weaker kind of evidence, so they get their own colour
+   rather than borrowing the verified green. */
+.sbx-cmd-badge.sbx-shiM { background: var(--info-bg, rgba(80,140,255,0.16)); color: var(--info-fg, #7aa2ff); }
+.sbx-cmd-when {
+  flex: 0 0 auto;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--fg-faint);
+}
+.sbx-cmd-origin {
+  flex: 0 0 auto;
+  font-size: 11px;
+  color: var(--fg-muted);
+}
+.sbx-cmd-text {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--fg);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sbx-cmd-meta {
+  flex: 0 0 auto;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--fg-faint);
+}
+.sbx-cmd-body {
+  border-top: 1px solid var(--border-faint);
+  padding: 10px 12px;
+}
+.sbx-cmd-proof {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--fg-muted);
+  margin-bottom: 8px;
+  word-break: break-all;
+}
+.sbx-cmd-out,
+.sbx-cmd-err {
+  margin: 0 0 8px;
+  padding: 9px 11px;
+  border-radius: 7px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 260px;
+  overflow-y: auto;
+}
+.sbx-cmd-out { background: var(--code-bg); color: var(--code-fg); }
+.sbx-cmd-err { background: var(--err-bg); color: var(--err-fg); }
+
+/* ── customisation ─────────────────────────────────────────────────────── */
+.sbx-sec-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.sbx-sec-tools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.sbx-btn-sm {
+  padding: 4px 10px;
+  font-size: 11px;
+}
+.sbx-live-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--fg-faint);
+  display: inline-block;
+}
+.sbx-live-dot[data-on="1"] { background: var(--ok-fg); }
+
+/* ── live process table ────────────────────────────────────────────────── */
+.sbx-proc-wrap {
+  border: 1px solid var(--border-faint);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+.sbx-proc {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+}
+.sbx-proc thead th {
+  text-align: left;
+  padding: 8px 12px;
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--fg-muted);
+  background: var(--bg-subtle);
+  border-bottom: 1px solid var(--border-faint);
+  white-space: nowrap;
+}
+.sbx-proc tbody td {
+  padding: 7px 12px;
+  border-bottom: 1px solid var(--border-faint);
+  color: var(--fg);
+  vertical-align: top;
+}
+.sbx-proc tbody tr:last-child td { border-bottom: none; }
+.sbx-proc-num { text-align: right; width: 68px; color: var(--fg-muted); }
+.sbx-proc-state { width: 62px; color: var(--fg-muted); }
+.sbx-proc-cmd {
+  max-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sbx-proc-empty {
+  text-align: center;
+  color: var(--fg-muted);
+  font-family: var(--font-sans);
+  padding: 16px 12px !important;
+}
+
+.sbx-target {
+  border: 1px solid var(--border-faint);
+  border-radius: var(--radius-md);
+  background: var(--bg-raised);
+  margin-bottom: 6px;
+  overflow: hidden;
+}
+.sbx-target-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  cursor: pointer;
+  list-style: none;
+  min-width: 0;
+}
+.sbx-target-head::-webkit-details-marker { display: none; }
+.sbx-target-head strong { flex: 0 0 auto; font-size: 12px; color: var(--fg); }
+.sbx-target-path {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--fg-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sbx-target-body { padding: 0 12px 10px; }
+.sbx-target-note {
+  margin: 0 0 8px;
+  font-size: 11px;
+  color: var(--fg-muted);
+}
+.sbx-manual {
+  flex: 0 0 auto;
+  font-size: 10px;
+  padding: 2px 7px;
+  border-radius: 5px;
+  background: var(--warn-bg);
+  color: var(--warn-fg);
+  white-space: nowrap;
+}
+.sbx-target .sandbox-out { margin-top: 8px; max-height: 260px; font-size: 11px; }
+.sbx-doc {
+  margin: 0;
+  padding: 16px 18px;
+  border: 1px solid var(--border-faint);
+  border-radius: var(--radius-md);
+  background: var(--bg-inset);
+  color: var(--fg);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  line-height: 1.75;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 620px;
+  overflow-y: auto;
+}
 .env-name { font-size: 12px; font-weight: 500; color: var(--fg); width: 132px; flex-shrink: 0; }
 .env-detail {
   font-family: var(--font-mono);

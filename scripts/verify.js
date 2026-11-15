@@ -121,16 +121,15 @@ cliVer.status === 0
   ? pass('claude cli runs', cliVer.stdout.trim())
   : fail('claude cli runs', (cliVer.stderr || '').trim());
 
-// ── 3b. guest front ends: PE integrity + real window ──────────────────────
+// ── 3b. guest front ends: PE integrity ────────────────────────────────────
 /**
  * A guest that cannot start is the hardest failure to notice: the panel simply
- * stays blank. So each one is launched for real and must produce a window.
+ * stays blank. Each one below is the app that ships in this build, so a missing
+ * one is a packaging failure rather than an optional extra.
  */
 const GUEST_EXES = {
-  opcode: path.join(APP, 'vendor', 'opcode', 'opcode.exe'),
-  codex: path.join(APP, 'vendor', 'codex', 'codex-desktop.exe'),
-  emdash: path.join(APP, 'vendor', 'emdash', 'Emdash.exe'),
-  obsidian: path.join(APP, 'vendor', 'obsidian', 'Obsidian.exe'),
+  claude: path.join(APP, 'vendor', 'claude-official', 'claude.exe'),
+  codex: path.join(APP, 'vendor', 'codex-official', 'ChatGPT.exe'),
 };
 function readPeHeaders(file) {
   const fd = fs.openSync(file, 'r');
@@ -154,12 +153,7 @@ function readPeHeaders(file) {
 
 for (const [name, exe] of Object.entries(GUEST_EXES)) {
   if (!fs.existsSync(exe)) {
-    // Claudian's host is optional in the report but its plugin files are not.
-    if (name === 'obsidian') {
-      fail(`guest ${name}`, 'not bundled');
-    } else {
-      fail(`guest ${name}`, 'not bundled');
-    }
+    fail(`guest ${name}`, 'not bundled');
     continue;
   }
   const pe = readPeHeaders(exe);
@@ -168,13 +162,66 @@ for (const [name, exe] of Object.entries(GUEST_EXES)) {
     continue;
   }
   const mb = (fs.statSync(exe).size / (1024 * 1024)).toFixed(1);
-  pass(`guest ${name}`, `${mb} MB, PE machine 0x${pe.machine.toString(16)}`);
+  // Subsystem 2 is the GUI subsystem; a console build would flash a window instead
+  // of opening a panel, so the value is checked rather than merely reported.
+  const gui = pe.subsystem === 2;
+  if (gui) {
+    pass(`guest ${name}`, `${mb} MB, PE machine 0x${pe.machine.toString(16)}, GUI subsystem`);
+  } else {
+    fail(`guest ${name}`, `not a GUI executable (subsystem ${pe.subsystem})`);
+  }
 }
 
-// Claudian plugin triple
-for (const f of ['main.js', 'manifest.json', 'styles.css']) {
-  const p = path.join(APP, 'vendor', 'claudian', f);
-  fs.existsSync(p) ? pass(`claudian ${f}`) : fail(`claudian ${f}`, 'missing');
+// Each guest's own application archive, which is where its UI actually lives.
+{
+  const asars = {
+    claude: path.join(APP, 'vendor', 'claude-official', 'resources', 'app.asar'),
+    codex: path.join(APP, 'vendor', 'codex-official', 'resources', 'app.asar'),
+  };
+  for (const [name, p] of Object.entries(asars)) {
+    if (fs.existsSync(p)) {
+      pass(`guest ${name} app archive`, `${(fs.statSync(p).size / (1024 * 1024)).toFixed(1)} MB`);
+    } else {
+      fail(`guest ${name} app archive`, 'missing');
+    }
+  }
+}
+
+// Bundled sandbox runtime: the binary, the kernel and the root filesystem all
+// have to be there, because the sandbox cannot start without any of them.
+{
+  const sbxBits = [
+    ['sbx binary', path.join(APP, 'vendor', 'sbx', 'bin', 'sbx.exe')],
+    ['sbx kernel', path.join(APP, 'vendor', 'sbx', 'libexec', 'nerdbox-kernel-x86_64')],
+    ['sbx rootfs', path.join(APP, 'vendor', 'sbx', 'libexec', 'nerdbox-rootfs-x86_64.erofs')],
+  ];
+  for (const [label, p] of sbxBits) {
+    if (fs.existsSync(p)) {
+      pass(label, `${(fs.statSync(p).size / (1024 * 1024)).toFixed(1)} MB`);
+    } else {
+      fail(label, 'missing');
+    }
+  }
+}
+
+// Protocol translator: Claude Code needs it for providers that serve open models
+// only on the OpenAI wire. Checked for presence and for the header fix that makes
+// those gateways accept the request.
+{
+  const shim = path.join(APP, 'vendor', 'shim', 'anthropic_shim.py');
+  if (!fs.existsSync(shim)) {
+    fail('shim anthropic_shim.py', 'missing');
+  } else {
+    const text = fs.readFileSync(shim, 'utf8');
+    pass('shim anthropic_shim.py', `${(fs.statSync(shim).size / 1024).toFixed(1)} KB`);
+    // Gateways reject urllib's default User-Agent with 403, so the shim must set one.
+    text.includes('User-Agent')
+      ? pass('shim sends a User-Agent', 'required by some gateways')
+      : fail('shim sends a User-Agent', 'urllib default gets 403 at commandcode');
+    text.includes('ANTHROPIC_SHIM_READY')
+      ? pass('shim readiness line', 'ANTHROPIC_SHIM_READY')
+      : fail('shim readiness line', 'missing');
+  }
 }
 
 // ── 3c. koffi loads and exposes Win32 ─────────────────────────────────────
